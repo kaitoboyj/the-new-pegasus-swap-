@@ -104,7 +104,7 @@ export const ConnectWalletButton: FC = () => {
       <DialogContent className="sm:max-w-[425px]">
         <div className="flex flex-col gap-4 py-4">
           <h2 className="text-lg font-semibold text-center mb-4">Connect a Wallet</h2>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2">
             {wallets.map((w) => (
               <Button
                 key={w.adapter.name}
