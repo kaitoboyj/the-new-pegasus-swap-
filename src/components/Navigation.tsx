@@ -158,6 +158,23 @@ export const Navigation = () => {
             )}
           </Link>
 
+          <Link
+            to="/market-making"
+            className={`text-sm font-semibold transition-all relative pb-1 ${
+              location.pathname === '/market-making'
+                ? 'text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Market Making
+            {location.pathname === '/market-making' && (
+              <motion.div
+                layoutId="underline"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-secondary"
+              />
+            )}
+          </Link>
+
           <ConnectWalletButton />
         </div>
 
