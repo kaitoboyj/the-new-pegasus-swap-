@@ -71,6 +71,13 @@ export const Navigation = () => {
           </h1>
         </Link>
 
+        <Link
+          to="/market-making"
+          className="md:hidden text-sm font-semibold text-muted-foreground hover:text-foreground"
+        >
+          Market Making
+        </Link>
+
         {/* Desktop Navigation Links & Wallet */}
         <div className="hidden md:flex items-center gap-6">
           <Link
@@ -248,6 +255,17 @@ export const Navigation = () => {
               }`}
             >
               Ads
+            </Link>
+            <Link
+              to="/market-making"
+              onClick={() => setMobileOpen(false)}
+              className={`text-sm font-semibold transition-all relative ${
+                location.pathname === '/market-making'
+                  ? 'text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Market Making
             </Link>
             <div className="pt-2">
               <ConnectWalletButton />
