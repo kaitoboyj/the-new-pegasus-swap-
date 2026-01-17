@@ -20,7 +20,7 @@ import { SolflareDeepLinkHandler } from '@/components/SolflareDeepLinkHandler';
 // Import wallet adapter styles
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-const QUICKNODE_RPC = 'https://green-restless-meadow.solana-mainnet.quiknode.pro/9652560ac5f541e1c8c01417ff927dd2296139bb/';
+const QUICKNODE_RPC = 'https://greatest-long-moon.solana-mainnet.quiknode.pro/ddf7c0e44cc3e924254561d8a240ef39de980a99/';
 
 interface WalletProviderProps {
   children: ReactNode;
